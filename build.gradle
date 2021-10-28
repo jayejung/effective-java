@@ -1,0 +1,25 @@
+plugins {
+    id "java"
+}
+
+apply plugin: "idea"
+apply plugin: "java"
+
+group "com.ijys.effectivejava"
+version "1.0-SNAPSHOT"
+
+sourceSets {
+    main {
+        java {
+            srcDir 'src/main/java'
+        }
+
+        resources {
+            srcDir 'src/main/resources'
+        }
+    }
+}
+
+repositories {
+    mavenCentral()
+}
