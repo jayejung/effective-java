@@ -59,7 +59,7 @@
 3. Builder pattern #1  
    <code> com.ijys.effectivejava.item02.NutritionFacts</code>
    * NutritionFactsBuilder는 immutalbe하고, 모든 매개변수의 기본값들을 한곳에 모아두었음.
-   * 세터들은 빌더 자신을 반환하므로 연쇄적으로 호출가능함.(fluent AaPI or method chaining)
+   * 세터들은 빌더 자신을 반환하므로 연쇄적으로 호출가능함.(fluent API or method chaining)
    * _NutritionFacts nutritionFactsWithCalories = new NutritionFacts.NutritionFactsBuilder(100, 2).calories(0).build();_ 와 같은 클라이언트 코드는 쓰기 쉽고 읽기도 쉬움.
    * 빌더 패턴은 (파이썬, 스칼라에 있는) 명명된 선택적 매개변수(named optional parameters)를 흉내 낸 것이다.
    * (유효성 검사 코드는 생략되었지만) 잘못된 매개변수를 최대한 일찍 발견하려면 빌더의 생성자와 메서드에서 입력 매개변수를 검사하고,
