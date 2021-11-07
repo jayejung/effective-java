@@ -17,7 +17,7 @@
       <code>Date d = Date.from(instant);</code>
     
     of: 여러 매개변수를 받아 적합한 타입의 인스턴스를 반환하는 집계 메소드  
-      <code>Set<Rank> faceCards = EnumSet.of(JACK, QUEEN, KING);</code>
+      <code>Set&lt;Rank&gt; faceCards = EnumSet.of(JACK, QUEEN, KING);</code>
     
     valueOf: from과 of의 더 자세한 버전  
       <code>BigInteger prime = BigInteger.valueOf(Integer.MAX_VALUE);</code>
@@ -35,7 +35,7 @@
       <code>BufferedReader br = Files.newBufferedReader(path);</code>
     
     type: getType과 newType의 간결한 버전  
-      <code>List<Compliant> litany = Collections.list(legacyLitany);</code>
+      <code>List&lt;Compliant&gt; litany = Collections.list(legacyLitany);</code>
    </pre>
 ### item #2: 생성자에 매개변수가 많다면 빌더를 고려하라.
 
@@ -76,5 +76,32 @@
    * Telescoping Constructor Pattern 보다는 코드가 장황해서 매개변수가 4개 이상되어야 값어치를 함.
    * 하지만, API는 시간이 지날 수록 매개변수가 많아지는 경향이 있음.
 
+### item #3: private 생성자나 열거 타입으로 싱글턴임을 보증하라.
+
+<code>com.ijys.effectivejava.item03.Item03Main</code>
+* stateless 상태의 객체, 설계상 유일해야하는 객체의 경우에는 싱글톤으로...  
+* 싱글톤을 만드는 방법은 일반적으로 2가지.  
+  * 2가지 모두 생성자는 private으로 감춰두고 유일한 instance에 접근할 수 있는 수단으로 public static 멤버를 하나 마련함.
+  1. public static 멤버가 final인 경우.  
+     <code>com.ijys.effectivejava.item03.Elvis01</code>  
+  public, protected 생성자가 없으므로, Elvis01 class가 초기화 될때 만들어진 인스턴스가 전체 시스템에서 하나뿐임을 보장함.  
+  AccessibleObject.setAccessible을 사용해 private method를 호출할 수 있으나, 이런 공격을 방어하려면 생성자에서 두 번째 객체가 생성하려고 할때 예외를 던지면 됨.  
+
+  2. 정적 팩토리 메소드를 public static 멤버로 제공.  
+     <code>com.ijys.effectivejava.item03.Elvis02</code>  
+  Elvis02.getInstance는 항상 같은 객체의 참조를 반환하므로 제2의 Elvis02 인스턴스를 만들지 않음.(reflection을 이용한 예외는 똑같이 발생)  
+  Elvis01 방식(1. public static멤버가 final인 경우)의 장점은 해당 클래스 싱글톤임이 API에 명백하게 드러남. public static 필드가 final이니 절대로 다른 객체를 참조 할 수 없음. 두 번째 장점은 간결함.  
+  한편, 두 번째 방식(Elvis02: 2. 정적 팩토리 메소드를 public static 멤버로 제공)의 첫 번째 장점은 (마음이 바뀌면) API를 바꾸지 않고 싱글톤이 아니게 변경할 수 있음. 유일한 인스턴스를 반환하던 팩토리 메소드가 호출하는 쓰레드 별로 다른 인스턴스를 생성하여 반환하게 변경할 수 있음.  
+  두 번째 장점은 원한다면 정적 팩토리를 제네릭 싱글톤 팩토리로 만들 수 있다는 점임(item30). 세 번째 장점은 정적 팩토리의 메소드 참조를 공급자(supplier)로 사용할 수 있다는 점이다. 가령 Elvis02.getInstance를 Supplier<Elvis02>로 사용하는 식이다(item 43, 44). 이러한 장점들이 굳이 필요하지 않다면 public 필드 방식이 좋다.
+  
+  * 위의 2가지 방법중 하나로 생성된 싱글톤이 보장된 객체를  serialize하고 unserializa하면 새로운 객체가 생성되어서 싱글톤 상황이 깨짐. 
+  멤버 변수를 모두 transient로 선언하고, readResolve 메소드를 구현해서 싱글톤을 유지할 수 할 수 있음. (item 89)  
+  <code>com.ijys.effectivejava.item03.SerializableMember</code>
+* 위의 2가지와 다른 방법은 원소가 하나인 열거형으로 선언하게 되면 싱글톤이 유지됨.  
+   <code>com.ijys.effectivejava.item03.Elvis03</code>
+   * public 필드 방식과 비슷하지만, 더 간결하고, 추가 노력없이 직렬화 할 수 있고, 복잡한 직렬화 상황이나 리플렉션 공격에도 제2의 인스턴스가 생기는 일을 완벽하게 막아준다.  
+   * 조금 부자연스럽게 보일수 있으나, 대부분의 상황에서 원소가 하나뿐인 열거 타입이 싱글톤을 만드는 가장 좋은 방법이다. 단, 만들려는 싱글톤이 Enum외의 클래스를 상속해야 한다면 이 방법은 사용할 수 없음(Enum이 다른 인터페이스를 구현하도록 선언할 수는 있음).
+
+### item #4: 인스턴스화를 막으려거든 private 생성자를 사용하라
 
 
