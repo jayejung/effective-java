@@ -103,5 +103,10 @@
    * 조금 부자연스럽게 보일수 있으나, 대부분의 상황에서 원소가 하나뿐인 열거 타입이 싱글톤을 만드는 가장 좋은 방법이다. 단, 만들려는 싱글톤이 Enum외의 클래스를 상속해야 한다면 이 방법은 사용할 수 없음(Enum이 다른 인터페이스를 구현하도록 선언할 수는 있음).
 
 ### item #4: 인스턴스화를 막으려거든 private 생성자를 사용하라
+<code>com.ijys.effectivejava.item04.ImpossibleInstantiationUtils</code>
+* private 생성자와 생성자에서 AssertionError을 thrown하므로, 인스턴스화를 막는다.
+* 주석을 꼭 포함해서 생성자를 만들지 못함을 noti한다.
 
+### item #5: 자원을 직접 명시하지 말고 의존 객체 주입을 사용하라
+<code>com.ijys.effectivejava.item05.</code>
 
