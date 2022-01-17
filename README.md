@@ -160,3 +160,53 @@ public class SpellCheck {
 </pre>
 
 ### item #6: 불필요한 객체 생성을 피하라
+* 똑같은 기능의 객체를 매번 생성하지 말고 재사용해라. 재상용은 빠르고 세련된다. 특히, 불변 객체(item 17)는 언제든지 재사용 할 수 있다.  
+다음은 절대 하지 말아야할 예이다.  
+<code>String s = new String("bikini");</code>  
+실행될 때마다 String 인스턴스를 새로 만든다. 개선된 버전은 아래와 같다.  
+<code>String s = "bikini";</code>  
+위의 코드는 새로운 객채를 생성하지 않고 하나의 String 인스턴스를 사용한다.  
+* 생성자 대신 정적 팩토리 메소드(item 1)을 제공하는 불변 클래스에서는 정적 팩토리 메서드를 사용해 불필요한 객체 생성을 피할 수 있다. 
+예컨대 Boolean(String) 생성자 대신 Boolean.valueOf(String) 팩토리 메소드를 사용하는게 좋다.(이 생성자는 java9에서 deprecated 되었다). 생성자는 호출할 때마다 새로운 객체를 만들지만, 팩터리 메서드는 그렇지 않다.
+* 생성 비용이 비싼 객체도 있다. 비싼 객체가 반복적으로 필요하다면 캐싱하여 재사용하기를 권한다.(생성비용이 비싼지는 매번 명확하게 알수는 없다). 
+아래의 코드는 주어진 문자열이 유효한 로마숫자인지를 확인하는 정규표현식을 사용한 메소드이다.  
+```java
+static boolean isRomanNumeral(String s) {
+    return s.matches("^(?=.)M*(C[MD]|D?C{0,3})(X[CL]|L?X{0,3})(I[XV]|V?I{0,3})$");
+}
+```
+* 위의 방식의 문제점은 String.matches 메소드를 사용한다는 데 있다. <b>String.matches는 정규표현식으로 문자열 형태를 확인한느 가장 쉬운 방법이지만, 성능이 중요한 상황에서 반복해 사용하기엔 적합하지 않다.</b>
+이 메소드가 내부에서 만드는 정규표현식용 Pattern 인스턴스는, 한 번 쓰고 버려져서 곧바로 가비지 컬렉션 대상이 된다. Pattern은 입력받은 정규표현식에 해당하는 유한 상태 머신(finite state machine)을 만들기 때문에 인스턴스 생성 비용이 높다.  
+성능을 개선하려면 필요한 정규표현식을 표현하는 (불변인) Pattern인스턴스를 클래스 초기화(정적 초기화) 과정에서 직접 생성해 캐싱해두고, 나중에 isRomanNumeral 메서드가 호출될 때마다 이 인스턴스를 재사용 한다.
+```java
+public class RomanNumerals {
+    private static final Pattern ROMAN = Pattern.compile("^(?=.)M*(C[MD]|D?C{0,3})(X[CL]|L?X{0,3})(I[XV]|V?I{0,3})$");
+    
+    static boolean isRomanNumeral(String s) {
+        return ROMAN.matcher(s).matches();
+    }
+}
+```
+* 위의 개선된 방식으로 8자리 숫자로 구성된 문자 126개를 사용해서 테스트해보니 약간 빠른 성능르 보였다.  
+<code>com.ijys.effectivejava.item06.Item06Main</code>
+* 성능만 좋아진 것이 아니라 코드도 명확해졌다. 개선 전에서는 존재조파 몰랐던 Pattern 인스턴스를 static final 필드로 꺼내어 이름을 지어주어 코드의 의미가 훨씬 잘 드러난다.
+* 개선된 isRamonNumeral 방식의 클래스가 초기회된 후 이 메서드를 한 번도 호출하지 않는다면 ROMAN 필드는 쓸데 없이 초기화되는 것이다.
+isRomanNumeral 메소드가 처음 호출될 때 필드를 초기화하는 지연 초기화(lazy initialization, item 83)로 불필요한 초기화를 없앨 수는 있지만, 권하지는 않는다. 코드를 복잡하게 만들고 성능은 크게 향상되지 않을 때가 많기 때문이다(item 67).
+* 오토박싱(auto boxing)도 불필요한 객체를 만들어내는 다른 예이다. 오토박싱은 프로그래머가 기본 타입과 박싱된 기본 타입을 섞어 쓸때 자동으로 상호 변환해주는 기술이다.
+<b>오토박싱은 기본 타입과 그에 대응하는 박싱된 기본 타입의 구분을 흐려주지만, 완전히 없애주는 것은 아니다.</b> 
+의미상으로는 특별한 것이 없어보이지만, 성능에서는 큰 차이를 보인다(아이템 61). 다음은 모든 양의 정수의 총합을 구하는 메소드이다.
+```java
+private static long sum() {
+    Long sum = 0;
+    for (long i = 0; i <= Integer.MAX_VALUE; i++)
+        sum += i;
+    
+    return sum;
+}
+```
+* sum 변수를 long이 아닌, Long으로 선언되어 있기 때문에 불필요한 Long 인스턴스가 2^31개가 만들어진다.
+단순히 sum을 long으로 선언해주면 거의 10배의 성능 향상을 확인할 수 있다. <b>박싱된 기본 타입보다는 기본 타입을 사용하고, 의도치 않은 오토박싱이 숨어들지 않도록 주의하자.</b>
+* 이번 아이템을 "객체 생성은 비싸니 피해야 한다"로 오해하면 안된다. 특이 요즘 JVM에서의 garbage collector의 상당히 최적화 되어 있어서 크게 부담이 없다.
+만약 프로그램의 명확성, 간결성, 기능을 위해서 객체를 추가로 생성한느 것이라면 일반적로 좋은 일이다.
+
+### item #7: 다 쓴 객체 참조를 해제하라
