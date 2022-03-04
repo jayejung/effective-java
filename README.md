@@ -275,8 +275,9 @@ public class Stack {
 * 캐시를 만들때 보통은 캐시 엔트리의 유효기간을 정확히 정의하기 어렵기 때문에 시간이 지날수록 엔트리를 삭제 대상으로 만드는 방식을 흔히 사용한다.
 * 이런 방식에서는 삭제 대상 엔트리를 이따금 청소해줘야 한다. (ScheduledThreadPoolExecutor 같은) 백그라운드 스레드를 활용하거나 캐시에 새 엔트리를 추가할때 부수작업으로 수행하는 방법이 있다.
 LinkedHashMap은 removeEldestEntry 메서드를 사용해서 후자의 방식으로 처리한다. 더 복잡한 캐시를 만들고 싶다면 java.lang.ref 패키지를 직접 활용해야 할 것이다.
-* 메모리 누수의 세 번째 주범은  바로 리스너(listener) 혹은 콜백(callback)이라 부르는 것이다. 클라이언트가 콜백을 등록만 하고 명확히 해지하지 않는다면, 
-먼가 조치해주지 않는 한 콜백은 계속 쌓여갈 것이다. 이럴때 콜백을 약한 참조(weak reference)로 저장하면 가비지 컬렉터가 즉시 수거해간다. 예를 들어 WeakHashMap에 키로 저장하면 된다.
+* 메모리 누수의 세 번째 주범은 바로 리스너(listener) 혹은 콜백(callback)이라 부르는 것이다. 클라이언트가 콜백을 등록만 하고 명확히 해지하지 않는다면,
+  먼가 조치해주지 않는 한 콜백은 계속 쌓여갈 것이다. 이럴때 콜백을 약한 참조(weak reference)로 저장하면 가비지 컬렉터가 즉시 수거해간다. 예를 들어 WeakHashMap에 키로 저장하면 된다.
+
 <pre>
 <b>핵심 정리</b>  
 메모리 누수는 겉으로 잘 드러 나지 않아 시스템에 수년간 잠복하는 사례도 있다. 이런 누수는 철저한 코드 리뷰나 힙 프로파일러 같은 디버깅 도구를 동원해야만 발견되기도 한다.
@@ -286,3 +287,89 @@ APM으로 봐도 되고... 없으면 jmap 으로 하면 될 듯
 </pre>
 
 ### item #08: finalizer와 cleaner 사용을 피하라
+
+* 가비지컬렉터가 하게 해라. finalizer와 cleaner가 객체를 회수하는것을 보장하지 않음. 오히려 가비지 컬렉터를 방해한다.
+* finalizer와 cleaner로는 제때 실행되어야 하는 작업은 절대 할 수 없다. 실행되는 타이밍뿐 아니라, 실행 여부조차도 보장 받지 못한다. 접근할 수 없는 일부 객체에 딸린 종료 작업을 전혀 수행하지
+  못한 채 프로그램이 종료 될 수도 있다. 따라서 프로그램 생애주기와 상관없는, <b>상태를 영구적으로 수정하는 작업에는 절대 finalizer와 cleaner에 의존해서는 안 된다.</b>
+  예를 들어, DB같은 공유자원의 영구 락(lock)해제를 finalizer와 cleaner에 맡겨 놓으면 분산 시스템 전체가 서서히 멈출 것아다.
+* try-with-resources(item 09)보다 50배 더 느린 테스트 결과가 있었다.
+* 걍 쓰지말고, 만약에 파일아니 쓰레드 등 종료해야할 자원을 담고 있는 객체의 클래스에서 finalize나 cleaner를 대신해줄 묘안은 <b>autoClosable을 구현해</b>주고, 클라이언트에서 인스턴스를
+  다 쓰고 나면 close 메소드를 호출하면 된다(일반적으로 예외가 발생해도 제대로 종료되도록 try-with-resources)를 사용해야한다. 아이템 9). 각 인스턴스는 자신이 닫혔는지를 추적하는 것이 좋다.
+  다시 말새, close메소드에서 이 객체가 더 이상 유효하지 않음을 필드에 기록하고, 다른 메소드는 이 필드를 검사해서 객체가 닫힌 후에 불렀다면 IllegalStateException을 던지는 것이다.
+* 그렇다면 finalizer와 cleaner는 어디에 사용해야할까?
+    * 하나는 자원의 소유자가 close메소드를 호출하지 않는 것에 대비한 안전망 역할이다. cleaner와 finalizer가 즉시 (혹은 끝까지) 호출되리라는 보장은 없지만, 클라이언트가 하지 않은 자원회수를
+      늦게라도 해주는 것이 안 하는 것보다는 낫다. 이런 안전망 역할의 finalizer를 작성할 때는 그럴 만한 값어치가 있는지 심사숙고하자. 자바 라이브러리의 일부 클래스는 안전망 역할의 finalizer를
+      제공한다.
+      <b>FileInputStream, FileOutputStream, ThreadPoolExecutor</b>가 대표적이다.
+    * 두번째는 네이티브 피어(native peer)와 연결된 객체에서다. 네이티브 피어란 일반 자바 객체가 네이티브 메서드를 통해 기능을 위임한 네이티브 객체를 말한다. 네이티브 피어는 자바 객체가 아니니
+      가비지 컬렉터는 그 존재를 알지 못한다. 그 결과 자바 피어를 회수할 때 네이티브 객체까지 회수하지 못한다. cleaner와 finalizer가 처리하기에 적당한 작업니다. 단, 성능 저하를 감당할 수
+      있고 네이티브 피어가 심각한 자원을 가지고 있지 않을 때만 해당된다. 성능 저하를 감당할 수 있고 네이티브 피어가 심각한 자원을 가지고 있지 않을 때에만 해당된다. 성능 저하를 감당할 수 없거나 네이티브
+      피어가 사용하는 자원을 즉시 회수해야 한다면 앞서 설명한 close 메서드를 사용해야 한다.
+    * cleaner는 사용하기 조금 까다롭다. 아래의 Room class를 보면, 방(room)자원을 수거하기 전에 반드시 청소(clean)해야 한다고 가정해보자. Room 클래스는 AutoCloseable을
+      구현한다. 사실 방 자원을 수거할때 자동으로 cleaner를 사용할지 말지는 내부 구현 방식에 대한 문제다. 즉, finalizer와 달리 cleaner는 클래스의 public API에 나타나지 않는다는
+      이야기이다.
+  ```java
+    public class Room implements AutoCloseable {
+  
+        private static final Cleaner cleaner = Cleaner.create();
+
+        // 청소가 필요한 자원. 절대 Room을 참조해서는 안 된다!
+        private static class State implements Runnable {
+            int numJunkPiles;   // 방(Room)안의 쓰레기 수
+
+            State(int numJunkPiles) {
+                this.numJunkPiles = numJunkPiles;
+            }
+
+            // close 메서드나 cleaner가 호출한다.
+            @Override
+            public void run() {
+                System.out.println("방 청소");
+                numJunkPiles = 0;
+            }
+        }
+
+        // 방의 상태. cleanable과 공유한다.
+        private final State state;
+
+        // cleanable 객체. 수거 대상이 되면 방을 청소한다.
+        private final Cleaner.Cleanable cleanable;
+
+        public Room(int numJunkPiles) {
+            state = new State(numJunkPiles);
+            cleanable = cleaner.register(this, state);
+        }
+  
+        @Override
+        public void close() throws Exception {
+            cleanable.clean();
+        }
+    }
+  ```
+    * 위의 코드가 좀 더 현실적이으로 만들려면 numJunkPiles 필드가 네이티브 피어를 가리키는 포인터를 담는 final long 변수여야 한다. 아래는 Room 클래스를 사용하는 예시이다.
+  ```java
+    public class AdultMain {
+        public static void main(String[] args) throws Exception {
+            try (Room myRoom = new Room(7)) {
+                System.out.println("안녕~");
+            }
+        }
+    }
+  ```
+
+  ```java
+    public class TeenagerMain {
+        public static void main(String[] args) {
+            new Room(99);
+            System.out.println("아무렴");
+            // System.gc();
+        }
+    }
+  ```
+    * AdultMain은 try-with-resources를 사용하여 잘 작성되었다. 프로그램이 끝날때(System.exit()), Room자원이 회수되면서 Room의 close() 메소드가 호출되고 있다.
+      하지만, TeenagerMain은 다른 결과를 보이고 있다. 즉, 앞에서 cleaner의 동작이 예측할 수 없다는 상황이다. cleaner의 명세에는 아래와 같이 쓰여 있다.
+  > System.exit을 호출할 때의 cleaner 동작은 구현하기 나름이다. 청소가 이뤄질지는 보장하지 않는다.
+    * 명세에서는 명시하지 않았지만 일반적인 프로그램 종료에서도 마찮가지다. TeenagerMain의 main 메소드에 System.gc()를 추가하는 것으로 종료전에 Room의 close() 메소드 호출을 할
+      수 있지만, 항상 호출되지 않을 수도 있다.
+
+### item #9: try-finally 보다는 try-with-resources를 사용하라
