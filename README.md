@@ -373,3 +373,86 @@ APM으로 봐도 되고... 없으면 jmap 으로 하면 될 듯
       수 있지만, 항상 호출되지 않을 수도 있다.
 
 ### item #9: try-finally 보다는 try-with-resources를 사용하라
+
+* 자바 라이브러리에는 close 메소드를 호출해 직접 닫아줘야하는 자원이 많다. (eg. InputSteam, OutputStream, java.sql.Connection 등..)
+* 자원 닫기는 클라이언트가 놓치기 쉬워서 성능 이슈로 이어지기 쉽다. 이런한 문제의 안전망으로 finalizer를 사용하기도 하지만 finalizer는 그리 믿을만하지 못하다(item #08).
+
+```java
+    static String firstLineOfFile(String path)throws IOException{
+        BufferedReader br=new BufferedReader(new FileReader(path));
+        try{
+        return br.readLine();
+        }finally{
+        br.close();
+        }
+        }
+```
+
+* 그런데 만약 자원을 하나 더 사용 한다면?
+
+```java
+    static void copy(String src,String dst)throws IOException{
+        InputStream in=new FileInputStream(src);
+        try{
+        OutputStream out=new FileOutputStream(dst);
+        try{
+        byte[]buf=new byte[BUFFER_SIZE];
+        int n;
+        while((n=in.read(buf))>=0)
+        out.write(buf,0,n);
+        }finally{
+        out.close();
+        }
+        }finally{
+        in.close();
+        }
+        }
+```
+
+* 너무 복잡하게 되었다.
+* 여튼.. 첫번째 예시 코드를 보면 심각한 결점이 있다. try블록, finally 블록 모두에서 exception이 발생할 수 있다. 첫 번째 예시에서 br.readLine()에서 예외가 발생하고, 같은 이유로
+  close()에서도 예외가 발생할 것이다. 이런 상황이라면, 두 번째 예외가 첫번째 예외를 집어삼켜 버린다. 이러면 stack trace에서 첫 번째 예외에 관한 정보는 남지 않아서 실제 시스템에서 디버깅을
+  어렵게 한다(일반적으로 첫 번째 예외를 보고 싶을 것 이므로).
+* 이러한 문제들은 자바7부터 지원하는 try-with-resources 덕에 모두 해결되었다. 이 구조를 사용하려면 해당 자원이 AutoCloseable 인터페이스를 구현해야한다. 단순히 void를 리턴하는
+  close 메서드 하나만 정의한 인터페이스이다. 자바 라이브러리와 서드파티 라이브러리들의 수많은 클래스와 인터페이스가 이미 AutoCloseable을 구현하거나 확장해뒀다. 닫아야하는 자원을 뜻하는 클래스를
+  작성한다면 AutoCloseable을 반드시 구현하기 바란다.
+* 다음은 try-with-resources를 사용해서 위의 코드들을 개선한 예시이다.
+
+```java
+    static String firstLineOfFile(String path)throws IOException{
+        try(BufferedReader br=new BufferedReader(new FileReader(path))){
+        return br.readLine();
+        }
+        }
+```
+
+```java
+    static void copy(String src,String dst)throws IOException{
+        try(IntputStream in=new FileInputStream(src);
+        OutputStream out=new FileOutputStream(dst)){
+        byte[]buf=new byte[BUFFER_SIZE];
+        int n;
+        while((n=in.read(buf))>=0)
+        out.write(buf,0,n);
+        }
+        }
+```
+
+* try-with-resources 버전이 짧고 읽기 쉬운 코드를 만들 수 있고, 예외를 진단하기도 훨씬 좋다. firstLineOfFile 메소드를 보면, readline과 close 양쪽에서 예외가 발생하면,
+  close에서 발생한 예외는 숨겨지고 readline에서 발생한 예외가 기록된다. 이 처럼, 실전에서는 프로그래머에게 보여줄 예외 하나만 보존되고 여러 개의 다른 예외가 숨겨질 수도 있다. 이렇게 숨겨진 예외들도
+  그냥 버려지지는 않고, stack trace 내역에 '숨겨졌다(suppressed)'는 꼬리표를 달고 출력된다. 또한, java7에서 Throwable에 추가된 getSuppressed 메서드를 이용하면 프로그램
+  코드에서 suppressed된 stack trace 내역을 가져올 수 있다.
+* try-with-resources에서도 try-finally 처럼 catch절을 사용할 수 있다. catch절 덕분에 try문을 더 중첩하지 않고도 다수의 예외를 처리할 수 있다. 다음 코드에서는
+  firstLineOfFile 메소드를 살짝 수정하여 파일을 열거나 데이터를 읽지 못했을 때 예외를 던지는 대신 기본값을 반환하도록 해봤다.
+
+```java
+    static String firstLineOfFile(String path,String defaultVal){
+        try(BufferedReader br=new BufferedReader(new FileReader(path))){
+        return br.readLine();
+        }catch(IOException ex){
+        return defaultVal;
+        }
+        }
+```
+
+### item #10: equals는 일반 규약을 지켜 재정의하라.
