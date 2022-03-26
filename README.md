@@ -611,10 +611,10 @@ APM으로 봐도 되고... 없으면 jmap 으로 하면 될 듯
       ```java
       @Override
       public boolean equals(Object o) {
-       if (o == null || o.getClass() != getClass())
-           return false;
-       Point p = (Point) o;
-       return p.x == x && p.y == y;
+          if (o == null || o.getClass() != getClass())
+              return false;
+          Point p = (Point) o;
+          return p.x == x && p.y == y;
       } 
       ```
         * 위의 코드는 리스코프 치환 원칙(LSP)에 위배된다.
@@ -624,24 +624,24 @@ APM으로 봐도 되고... 없으면 jmap 으로 하면 될 듯
       ```java
       // 단위 원 안의 모든 점을 포함하도록 unitCircle을 초기화한다.
       private static final Set<Point> unitCircle = Set.of(
-       new Point(1, 0), new Point(0, 1),
-       new Point(-1, 0), new Point(0, -1));
+         new Point(1, 0), new Point(0, 1),
+         new Point(-1, 0), new Point(0, -1));
       
       private static boolean onUnitCircle(Point p) {
-       return unitCircle.contains(p);
+          return unitCircle.contains(p);
       }
       ```
         * 좋은 코드는 아니지만, 어쨌든 동작하는 코드이다. 이제 값을 추가하지 않는 방식으로 Point를 확장하겠다. 만들어진 인스턴스의 개수를 생성자에서 세보도록 하자.
       ```java
       public class CounterPoint extends Point {
-       private static final AtomicInteger counter = new AtomicInteger();
+          private static final AtomicInteger counter = new AtomicInteger();
+          
+          public CounterPoint(int x, int y) {
+              super(x, y);
+              counter.incrementAndGet();
+          }
       
-       public CounterPoint(int x, int y) {
-           super(x, y);
-           counter.incrementAndGet();
-       }
-      
-       public static int numberCreated() { return counter.get(); }
+          public static int numberCreated() { return counter.get(); }
       }
       ```
         * 리스코프 치환의 원칙(Liskov Substitution Principle)에 따르면, 어떤 타입에 중요한 속성이라면 그 하위 타입에서도 마찬가지로 중요하다. 따라서 그 타입의 모든 메소드가 하위
@@ -652,28 +652,28 @@ APM으로 봐도 되고... 없으면 jmap 으로 하면 될 듯
           Point를 ColorPoint의 private 필드로 두고, ColorPoint와 같은 위치의 일반 Point를 반환하는 뷰(view)메서드(item #6)를 public으로 추가하는 식이다.
       ```java
       public class ColorPoint {
-       private final Point point;
-       private final Color color;
+          private final Point point;
+          private final Color color;
     
-       public ColorPoint(int x, int y, Color color) {
-           this.point = new Point(x, y);
-           this.color = Objects.requireNonNull(color);
-       }
-    
-       /**
-        * 이 ColorPoint의 Point뷰를 반환한다.
-        */
-       public Point asPoint() {
-           return point;
-       }
-    
-       @Override
-       public boolean equals(Object o) {
-           if (!(o instanceof ColorPoint))
-               return false;
-           ColorPoint cp = (ColorPoint) o;
-           return cp.point.equals(point) && cp.color.equals(color);
-       }
+          public ColorPoint(int x, int y, Color color) {
+              this.point = new Point(x, y);
+              this.color = Objects.requireNonNull(color);
+          }
+      
+          /**
+           * 이 ColorPoint의 Point뷰를 반환한다.
+           */
+          public Point asPoint() {
+              return point;
+          }
+          
+          @Override
+          public boolean equals(Object o) {
+              if (!(o instanceof ColorPoint)) 
+                  return false;
+              ColorPoint cp = (ColorPoint) o;
+              return cp.point.equals(point) && cp.color.equals(color);
+          }
       }
       ```
         * 자바 라이브러리에도 구체 클래스를 확장해 값을 추가한 클래스가 종종 있다. 한 가지 예로 java.sql.Timestamp는 java.util.Date를 확장한 후 nanoseconds필드를
