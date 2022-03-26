@@ -456,3 +456,329 @@ APM으로 봐도 되고... 없으면 jmap 으로 하면 될 듯
 ```
 
 ### item #10: equals는 일반 규약을 지켜 재정의하라.
+
+* equals 메소드는 재정의하기 쉬워 보이나 곳곳에 함정이 있어서 자칫하면 끔찍한 결과를 초래한다. 끔찍한 결과를 회피하는 방법은 아예 재정의하지 않는 것이다. 그냥 두면 그 클래스의 인스턴스는 오직 자기
+  자신과만 같게 된다. 아래의 상황중 하나에 해당된다면 재정의하지 않는 것이 최선이다.
+    * <b>각 인스턴스가 본질적으로 고유하다.</b> 값을 표현하는게 아니라 동작하는 개체를 표현하는 클래스가 여기 해당한다. Thread가 좋은 예로, Object의 equals 메소드는 이러한 클래스에 딱
+      맞게 구현되었다.
+    * <b>인스턴스의 '논리적 동치성(logical equality)'을 검사할 일이 없다.</b> 예컨대 java.util.regex.Pattern는 equals를 재정의해서 두 Pattern의 인스턴스가
+      같은 정규표현식을 나타내는지를 검사하는, 즉 논리적 동치성을 검사하는 방법도 있다. 하지만 설계자는 클라이언트가 이 방식을 원하지 않거나 애초에 필요하지 않다고 판단할 수도 있다. 설계자가 후자로
+      판단했다면 Object의 기본 equals만으로 해결된다.
+    * <b>상위 클래스에서 재정의한 equals가 하위 클래스에도 딱 들어맞는다.</b> 예컨대 대부분의 set 구현체는 AbstractSet이 구현한 equals를 상속받아 쓰고, List 구현체들은
+      AbstractList로 부터, Map구현체들은 AbstractMap으로부터 상속받아 그대로 쓴다.
+    * <b>클래스가 private이거나 package-private이고 equals 메서드를 호출할 일이 없다.</b> 여러분이 위험을 철저히 회피하는 스타일이라 equals가 실수라도 호출되는 걸 막고 싶다면
+      다음처럼 구현해두자.
+  ```java
+    @Override
+    public boolean equals(Object o) {
+        throw new AssertionError(); // 호출 금지!
+    }
+  ```
+* 그렇다면 equals를 재정의해야 할 때는 언제 일까? 객체 식별성(object identity: 두 객체가 물리적으로 같은가)이 아니라 논리적 동치성을 확인해야 하는데, 상위 클래스의 equals가 논리적
+  동치성을 비교하도록 재정의되지 않았을 때다. 주로 값 클래스들이 여기에 해당된다. 값 클래스란 Integer와 String처럼 값을 표현하는 클래스를 말한다. 두 값 객체를 equals로 비교하는 프로그래머는
+  객체가 같은지가 아니라 값이 같은지를 알고 싶어 할 것이다. equals가 논리적 동치성을 확인하도록 재정의해두면, 그 인스턴스는 값을 비교하길 원하는 프로그래머의 기대에 부응함은 물론 Map의 키와 Set의
+  원소로 사용할 수 있게 된다.
+* 값 클래스라 해도, 값이 같은 인스턴스가 둘 이상 만들어지지 않음을 보장하는 인스턴스 통제 클래스(item #01)라면 equals를 재정의하지 않아도 된다. Enum(item #34)도 여기에 해당된다. 이런
+  클래스에서는 논리적으로 같은 인스턴스가 2개 이상 만들어지지 않으니 논리적 동치성과 객체 식별성이 사실상 똑같은 의미가 된다.
+* equals 메서드를 재정의할 때는 반드시 일반 규약을 따라야 한다. 다음은 Object명세에 적힌 규약이다.
+  > equals 메서드는 동치관계(equivalence relation)를 구현하며, 다음을 만족한다.
+  > * <b>반사성(reflexivity)</b>: null이 아닌 모든 참조 값 x에 대해, x.equals(x)는 true이다.
+  > * <b>대칭성(symmetry)</b>: null이 아닌 모든 참조 값 x, y에 대해, x.equals(y)가 true이면 y.equals(x)도 true이다.
+  > * <b>추이성(transitivity)</b>: null이 아닌 모든 참조 값 x, y에 대해, x.equals(y)가 true이고, y.equals(z)도 true이면 x.equals(z)도 true다.
+  > * <b>일관성(consistency)</b>: null이 아닌 모든 참조 값 x, y에 대해, x.equals(y)를 반복해서 호출하면 항상 true를 반환하거나 항상 false를 반환한다.
+  > * <b>null-아님</b>: null이 아닌 모든 참조 값 x에 대해, x.equals(null)은 false다.
+* Object 명세에서 말하는 동치관계란 무엇일까? 쉽게 말해, 집합을 서로 같은 원소들로 이뤄진 부분집합으로 나누는 연산이다. 이 부분집합을 동치류(equivalence class: 동치 클래스)라 한다.
+  equals메소드가 쓸모 있으려면 모든 원소가 같은 동치류에 속한 어떤 원소와도 서로 교환할 수 있어야 한다.
+* 이제 동치관계를 만족시키기 위한 다섯 요건을 하나씩 살펴보자.
+    * <b>반사성</b>은 단순히 말하면 객체는 자기자신과 항상 같아야한다는 뜻이다.
+    * <b>대칭성</b>은 두 객체는 서로에 대한 동치 여부에 똑같이 답해야한다는 뜻이다. 반사성 요건과 달리 대칭성 요건은 어기기 쉽다. 대소문자를 구별하지 않는 문자열을 구현한 아래의 클래스를 예로 보자.
+      이 클래스에서 toString 메소드는 원본 문자열의 대소문자를 그대로 돌려주지만 equals에서는 대소문자를 무시한다.
+      ```java
+      public class CaseInsensitiveString {
+          private final String s;
+  
+          public CaseInsensitiveString(String s) {
+              this.s = Objects.requireNonNull(s);
+          }
+  
+          // 대칭성 위배
+          @Override
+          public boolean equals(Object o) {
+              if (o instanceof CaseInsensitiveString) {
+                  return  s.equalsIgnoreCase(((CaseInsensitiveString) o).s);
+              }
+  
+              if (o instanceof String) {  // 한방향으로 작동한다.
+                  return s.equalsIgnoreCase((String) o);
+              }
+  
+              return false;
+          }
+      }
+      ```
+        * CaseInsensitiveString의 equals는 순진하게 String에 대해서도 문자열 비교를 한다. 그래서 대칭성이 깨진 것이다. CaseInsensitiveString의 equals
+          메소드는 String으로 전달되는 Object를 equalsIgnoreCase를 통해서 판단하겠지만, String의 equals method는 문자열 그대로 비교를 할 것이다.
+      ```java
+          CaseInsensitiveString cis = new CaseInsensitiveString("polish");
+          String s = "polish";
+          cis.equals(s); // true
+          s.equals(cis); // false, 대칭성이 깨졌다.
+      ```
+        * 이번에는 CaseInsensitiveString을 컬렉션에 넣어보자.
+      ```java
+          List<CaseInsensitiveString> list = new ArrayList<>();
+          list.add(cis);
+          list.contains(s); // false, ArrayList에서 동치성 여부를 s.equals(cis)로 검사한다.
+      ```
+        * OpenJDK에서는 false를 리턴하지만, JDK 버전에 따라서는 true를 반환하거나 런타임 예외를 던질 수도 있다.
+          <b>equals 규약을 어기면 그 객체를 사용한느 다른 객체들이 어떻게 반응할지 알 수 없다.</b>
+        * 이 문제를 해결하려면 CaseInsensitiveString의 equals를 String과도 연동하겠다는 허황된 꿈을 버려야 한다. 그 결과 equals는 다음처럼 간단한 모습으로 바뀐다.
+      ```java
+          @Override
+          public boolean equals(Object o) {
+              return o instanceof CaseInsensitiveString &&
+                  ((CaseInsensitiveString) o).s.equalsIgnoreCase(s);
+          }
+      ```
+    * <b>추이성</b>은 첫 번째 개체와 두 번째 객체가 같고, 두 번째 객체와 세 번째 객체가 같다면, 첫 번째 객체와 세 번째 객체가 같아야 한다는 뜻이다. 이 요건도 쉽게 어길 수 있다. 상위 클래스에는
+      없는 새로운 필드를 하위 클래스에 추가하는 상황을 생각해보자. equals에 영향을 주는 정보를 추가한 것이다. 간단한 2차원에서의 점을 표현하는 클래스를 예로 들어 보자.
+      ```java
+        public class Point {
+            private final int x;
+            private final int y;
+    
+            public Point(int x, int y) {
+                this.x = x;
+                this.y = y;
+            }
+    
+            @Override
+            public boolean equals(Object o) {
+                if (!(o instanceof Point))
+                    return false;
+                Point p = (Point) o;
+                return p.x == x && p.y == y;
+            }
+        }
+      ```
+        * 이제 이 클래스를 확장해서 점에 색상을 더해보자.
+      ```java
+      public class ColorPoint extends Point {
+       private final Color color;
+    
+       public ColorPoint(int x, int y, Color color) {
+           super(x, y);
+           this.color = color;
+       }
+      }
+      ```
+        * equals 메소드는 어떻게 해야 할까? 그대로 둔다면 Point의 구현이 상속되어 색상 정보는 무시한 채 비교를 수행한다. equals 규약을 어긴 것은 아니지만, 중요한 정보를 빼고 비교를 하는
+          상황이다. 다음 코드 처럼 비교대상이 다른 colorPoint이고 위치와 색상이 같을 때만 true를 반환하는 equals를 생각해보자.
+      ```java
+      @Override
+      public boolean equals(Object o) {
+       if (!(o instanceof ColorPoint))
+           return false;
+       return super.equals(o) && ((ColorPoint) o).color == color;
+      }
+      ```
+        * 위의 코드는 대칭성이 깨진다. 그럼, ColorPoint.equals가 Point와 비교할 때는 생상을 무시하도록 하면 해결될까?
+      ```java
+      @Override
+      public boolean equals(Object o) {
+       if (!(o instanceof Point))
+           return false;
+    
+       // o가 일반 Point면 색상을 무시하고 비교한다.
+       if (!(o instanceof ColorPoint))
+           return o.equals(this);
+    
+       return super.equals(o) && ((ColorPoint) o).color == color;
+      }
+      ```
+        * 위의 코드는 대칭성은 지켜주지만 추이성이 깨져버린다.
+      ```java
+      ColorPoint p1 = new ColorPoint(1, 2, Color.RED);
+      Point p2 = new Point(1, 2);
+      ColorPoint p3 = new ColorPoint(1, 2, Color.BLUE);
+      ```
+        * 위의 코드로 선언된 객체들도 추이성에 위배된다(p1.equals(p3) -> false). 또한 이 방식은 무한 재귀에 빠질 위험도 있다. Point의 또 다른 하위 클래스로 smallPoint를
+          만들고 equals는 같은 방식으로 구현된다면 stackOverflowError를 일으킨다.
+        * 그렇다면 해결 방법은?  
+          사실 이러한 현상은 모든 객체 지향 언어의 동치관계에서 나타나는 근본적인 문제다. <b>구체 클래스를 확장해 새로운 값을 추가하면 equals 규약을 만족시킬 방법은 존재하지 않는다.</b>
+          객체 지향적 추상화의 이점을 포기하지 않는 한은 말이다.
+        * 이 말을 얼핏, equals 안의 instanceof 검사를 getClass 검사로 바꾸면 규약도 지키고 값도 추가하면서 구체 클래스를 상속할 수 있다는 뜻으로 들린다.
+      ```java
+      @Override
+      public boolean equals(Object o) {
+       if (o == null || o.getClass() != getClass())
+           return false;
+       Point p = (Point) o;
+       return p.x == x && p.y == y;
+      } 
+      ```
+        * 위의 코드는 리스코프 치환 원칙(LSP)에 위배된다.
+        * 위의 equals는 같은 구현 클래스의 객체와 비교할 때만 true를 반환한다. 괜찮아 보이지만 실제로 활용할 수는 없다. Point의 하위 클래스는 정의상 여전히 Point이므로 어디서든
+          Point로써 활용될 수 있어야 한다. 그런데, 이 방식에서는 그렇지 못한다. 예를 들어 주어진 점이 (반지름이 1인) 단위 원 안에 있는지를 판별하는 메서드가 필요하다고 해보자. 다음은 이를
+          구현한 코드다.
+      ```java
+      // 단위 원 안의 모든 점을 포함하도록 unitCircle을 초기화한다.
+      private static final Set<Point> unitCircle = Set.of(
+       new Point(1, 0), new Point(0, 1),
+       new Point(-1, 0), new Point(0, -1));
+      
+      private static boolean onUnitCircle(Point p) {
+       return unitCircle.contains(p);
+      }
+      ```
+        * 좋은 코드는 아니지만, 어쨌든 동작하는 코드이다. 이제 값을 추가하지 않는 방식으로 Point를 확장하겠다. 만들어진 인스턴스의 개수를 생성자에서 세보도록 하자.
+      ```java
+      public class CounterPoint extends Point {
+       private static final AtomicInteger counter = new AtomicInteger();
+      
+       public CounterPoint(int x, int y) {
+           super(x, y);
+           counter.incrementAndGet();
+       }
+      
+       public static int numberCreated() { return counter.get(); }
+      }
+      ```
+        * 리스코프 치환의 원칙(Liskov Substitution Principle)에 따르면, 어떤 타입에 중요한 속성이라면 그 하위 타입에서도 마찬가지로 중요하다. 따라서 그 타입의 모든 메소드가 하위
+          타입에서도 똑같이 잘 작동해야 한다. 이는 앞서의 "Point의 하위 클래스는 정의상 여전히 Point이므로 어디서든 Point로써 활용될 수 있어야 한다"를 표현한 말이다. 그런데,
+          CounterPoint의 인스턴스를 onUnitCircle 메서드에 넘기면 어떻게 될까? Point 클래스의 equals를 getClass를 사용해 작성했다면 onUnitCircle은 false를
+          반환할 것이다. 반면, Pointer equals를 instanceof 기반으로 올바로 구현했다면 CounterPoint 인스턴스를 건네줘도 onUnitCircle 메소드가 제대로 동작할 것아다.
+        * 구현 클래스의 하위 클래스에서 값을 추가할 방법은 없지만 괜찮은 우회 방법이 하나 있다. "상속 대신 컴포지션을 사용하라"는 아이템 #18의 조언을 따르면 된다. Point를 상속하는 대신
+          Point를 ColorPoint의 private 필드로 두고, ColorPoint와 같은 위치의 일반 Point를 반환하는 뷰(view)메서드(item #6)를 public으로 추가하는 식이다.
+      ```java
+      public class ColorPoint {
+       private final Point point;
+       private final Color color;
+    
+       public ColorPoint(int x, int y, Color color) {
+           this.point = new Point(x, y);
+           this.color = Objects.requireNonNull(color);
+       }
+    
+       /**
+        * 이 ColorPoint의 Point뷰를 반환한다.
+        */
+       public Point asPoint() {
+           return point;
+       }
+    
+       @Override
+       public boolean equals(Object o) {
+           if (!(o instanceof ColorPoint))
+               return false;
+           ColorPoint cp = (ColorPoint) o;
+           return cp.point.equals(point) && cp.color.equals(color);
+       }
+      }
+      ```
+        * 자바 라이브러리에도 구체 클래스를 확장해 값을 추가한 클래스가 종종 있다. 한 가지 예로 java.sql.Timestamp는 java.util.Date를 확장한 후 nanoseconds필드를
+          추가했다. 그 결과로 Timestamp의 equals는 대칭성을 위배하며, Date객체와 한 컬렉션에 넣거나 서로 섞어 사용하면 엉뚱하게 동작할 수 있다. 그래서 Timestamp의 API 설명에는
+          Date와 섞어 쓸 때의 주의사항을 언급하고 있다. 둘을 명확하게 분리해 사용하는 한 문제될 것은 없지만, 섞이지 않도록 보장해줄 수단은 없다. 자칫 실수하면 디버깅하기 어려운 이상한 오류를 경험할
+          수 있으니 주의하자. Timestamp를 이렇게 설계한 것은 실수 니 절대 따라 해서는 안 된다.
+      > 추상 클래스의 하위 클래스에서라면 equals 규약을 지키면서도 값을 추가 할 수 있다. "태그 달린 클래스보다는 클래스 계층구조를 활용하라"는 아이템 #23의 조언을 따르는 클래스 계층구조에서는 아주 중요한 사실이다. 예컨대 아무런 값을 갖지 않는 추상 클래스인 Shape을 위에 두고, 이를 확장하여 radius 필드를 추가한 Circle 클래스와, length와 width 필드를 추가한 Rectangle 클래스를 만들 수 있다. 상위 클래스를 직접 인스턴스로 만드는 게 불가능하다면 지금까지 이야기한 문제들은 일어나지 않는다.
+    * <b>일관성</b>은 두 객체가 같다면 (어느 하나 혹은 두 객체가 모두 수정되지 않는 한) 앞으로도 영원이 같아야 한다는 뜻이다. 가변 객체는 비교 시점에 따라서 서로 다를 수 있는 반면, 불변객체는
+      한번 변함없이 같거다 다르다. 클래스를 작성할때는 불변 클래스로 만드는 게 나을지 심사숙고하자(item #17). 불변클래스로 만들기로 했다면 equals가 한번 같다고 한 객체와는 영원히 같다고
+      해야한다.  
+      클래스가 불변이든 가변인든 <b>equals의 판단에 신뢰할 수 없는 자원이 끼어들게 해서는 안 된다.</b> 이 제약을 어기면 일관성 조건을 만족시키기가 아주 어렵다. 예를 들면,
+      java.net.URL의 equals는 주어진 URL과 매핑된 호스트의 IP 주소를 이용해서 비교한다. 호스트 명을 IP로 변경하려면 DNS lookup을 통해서 변환할텐데 그 결과가 항상 같다고 보장할
+      수 없다. 이는 실무에서도 종종 문제를 발생 시킨다. 이런 문제를 피하려면 equals는 항시 메모리에 존재하는 객체만을 사용한 결정적(deterministic) 계산만 수행해야 한다.
+    * <b>null-아님</b>으로 표현되는 마지막 요건은 이름처럼 모든 객체가 null이 아니어야 한다는 뜻이다. 수많은 클래스가 다음 코드처럼 입력이 null인지를 확인해 자신을 보호한다.
+      ```java
+      // 명시적 null 검사 - 필요 없다.
+      @Override
+      public boolean equals(Object o) {
+          if (o == null)
+              return false;
+          ...
+      }
+      ```
+      이러한 검사는 필요하지 않다. 동치성을 검사하려면 건너받은 객체를 적절히 형변환 후 필수 필드들의 값을 알아내야 한다. 그러기 위해서 형변환에 앞서서 instanceof 연산자로 입력 객체가 올바른
+      타입인지 검사해야 한다.
+      ```java
+      // 묵시적 null 검사 - 이쪽이 낫다.
+      @Override
+      public boolean equals(Object o) {
+          if (!(o instanceof MyType))
+              return false;
+          MyType mt = (MyType) o;
+          ...
+      }
+      ```
+      equals가 타입을 확인하지 않으면 잘못된 타입이 인수로 주어졌을 때 ClassCassException을 던저서 일반 규약을 위배하게 된다. 근데 instanceof는 피연산자가 null이면 false를
+      반환한다. 따라서 입력이 null이면 타입 확인 단계에서 false를 반환하기 때문에 null 검사를 명시적으로 할 필요가 없다.
+* 지금끼지의 내용을 종합해서 양질의 equals 메소드 구현 방법을 단계별로 정리해보자.
+
+> 1. <b>== 연산자를 사용해 입력이 자기 자진의 참조인지 확인한다.</b> 자기 자신이면 true를 반환한다. 이는 단순한 성능 최적화용으로, 비교 작업이 복잡한 상황일 때 효과가 매우 크다.
+> 2. <b>instanceof 연산자로 입력이 올바른 타입인지 확인한다.</b> 그렇지 않다면 false를 반환한다. 이때 올바른 타입은 equals가 정의된 클래스인 것이 보통이지만,
+     > 가끔은 그 클래스가 구현한 특정 인터페이스가 될 수도 있다. 어떤 인터페이스는 자신을 구현한 (서로 다른) 클래스끼리도 비교할 수 있도록 equals 규약을 수정하기도 한다.
+     > 이런 인터페이스를 구현한 클래스라면 equals규약을 수정하기도 한다. 이런 인터페이스를 구현한 클래스라면 equals에서 (클래스가 아닌) 해당 인터페이스를 사용해야 한다.
+     > Set, List, Map, Map.Entry 등의 컬렉션 인터페이스들이 여기 해당한다.
+> 3. <b>입력을 올바른 타입으로 형변환한다.</b> 앞서 2번에서 instanceof 검사를 했기 때문에 이 단계는 100% 만족 한다.
+> 4. <b>입력 객체와 자기 자신의 대응되는 '핵심' 필드들이 모두 일치하는지 하나씩 검사한다.</b> 모들 필드가 일치하면 true를, 하나라도 다르면 false를 반환한다.
+     > 2단계에서 인터페이스를 사용했다면 입력의 필드 값을 가져올 때도 그 인터페이스의 메서드를 사용해야 한다. 타입이 클래스라면 (접근 권한에 따라) 해당 필드에 직접 접근 할 수도 있다.
+
+* float와 double을 제외한 기본 타입 필드는 == 연산자로 비교하고, 참조 타입 필드는 각각의 equals 메소드로, float와 double 필드는 각각 정적 메서드인 Float.compare(
+  float, float)와 Double.compare(double, double)로 비교한다. float와 double을 특별 취급하는 이유는 Float.NaN, -0.0f, 특수한 부동소수 값등을 다뤄야 하기
+  때문이다. 자세한 설명은 [JLS 15.21.1]이나 Float.equals의 API 문서를 참고하자. Float.equals와 Double.equals 메서드를 대신 사용할 수도 있지만, 이 메서드들은
+  오토박싱을 수반할 수 있으니 성능상 좋지 않다. 배열 필드는 원소 각각을 앞서의 지침대로 비교한다. 배열의 모슨 원소가 핵심 필드라면 Arrays.equals 메소드들 중 하나를 사용하자.
+* 때로는 null도 정상값으로 취급하는 참조 타입 필드도 있다. 이런 필드는 정적 메소드인 Objects.equals(Object, Object)로 비교해 NPE 발생을 예방하자.
+* 앞서의 CaseInsensitiveString 예처럼 비교하기가 아주 복잡한 필드를 가진 클래스도 있다. 이럴 때는 그 필드의 표준형(canonical form)을 저장해둔 후 표준형 끼리 비교하면 훨씬
+  경제적이다. 이 기법은 특히 불변 클래스(item #17)에 제격이다. 가변 객체라면 값이 바뀔 때마다 표준형을 최신 상태로 갱신해줘야 한다.
+* 어떤 필드를 먼저 배교하느냐가 equals의 성능을 좌우하기도 한다. 최상의 성능을 바란다면 다를 가능성이 더 크거나 비교하는 비용이 싼 (혹은 둘 다 해당하는) 필드를 먼저 비교하자. 동기화용 lock 필드
+  같이 객체의 논리적 상태와 관련 없는 필드는 비교하면 안된다. 핵심 필드로부터 계산해낼 수 있는 파생 필드 역시 굳이 비교할 필요는 없지만, 파생 필드를 비교하는 쪽이 더 빠를 때도 있다. 파생 필드가 객체
+  전체의 상태를 대표하는 상황이 그렇다. 예컨대 자신의 영역을 캐시해두는 Polygon클래스가 있다고 해보자. 그렇다면 모든 변과 정점을 일일이 비교할 필요 없이 캐시해둔 영역만 비교하면 결과를 곧바로 알 수
+  있다.
+* <b>equals를 다 구현했다면 세가지만 자문해 보자. 대칭적인가 추이성이 있는가? 일관적인가?</b> 자문에서 끝내지 말고 단위 테스트를 작성해 돌려보자. 단, equals 메소드를 AutoValue를 이용해
+  작성했다면 테스트를 생략해도 안심할 수 있다. 세 요건중 하나라도 실패한다면 원인을 찾아서 고치자. 물론 나머지 요건인 반사성과 null-아님 요건도 만족해야 하지만, 이 둘이 문제가 되는 경우는 별로 없다.
+* 다음은 이상의 비법에 따라 작성해본 PhoneNumber 클래스용 equals 메서드다.
+  ```java
+    public final class PhoneNumber {
+        private final short areaCode, prefix, lineNum;
+
+        public PhoneNumber(short areaCode, short prefix, short lineNum) {
+            this.areaCode = rangeCheck(areaCode, 999, "지역코드");
+            this.prefix = rangeCheck(prefix, 999, "프리픽스");
+            this.lineNum = rangeCheck(lineNum, 999, "가입자 번호");
+        }
+
+        private static short rangeCheck(int val, int max, String arg) {
+            if (val < 0 || val > max) {
+                throw new IllegalArgumentException(arg + ": " + val);
+            }
+            return (short) val;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (o == this)
+                return true;
+            if (!(o instanceof PhoneNumber))
+                return false;
+            PhoneNumber pn = (PhoneNumber) o;
+            return pn.lineNum == this.lineNum && pn.prefix == this.prefix && pn.areaCode == this.areaCode;
+        }
+    }
+  ```
+* 드디어 마지막 주의 사항이다.
+    * <b>equals를 재정의할 때는 hashCode도 반드시 재정의하자</b>(item #11).
+    * <b>너무 복잡하게 해결하려 들지 말자.</b> 필드들의 동치성만 검사해도 equals 규약을 어렵지 않게 지킬 수 있다. File 객체의 symbolic link같은 alias를 비교하는 것은 과하다.
+    * <b>Object</b> 외의 타입을 매개변수로 받는 equals 메소드는 절대 선언하지 말자. 많은 사람이 아래와 같이 equals 메소드를 작성하고 문제의 원인을 찾는 실수를 한다.
+      ```java
+          // 잘못된 예 - 입력 타입은 반드시 Object 여야 한다.
+          public boolean equals(MyType o) {
+              ...
+          }
+      ```
+      위의 예시는 Object.equals를 Override한게 아니다. 매개변수가 다르므로 Overloading(다중 정의 - item #52)된 것이다. 이 메소드는 하위 클래스에서 @Override
+      어노테이션이 긍정 오류(false positive: 거짓 양성)을 내게하고 보안 측면에서도 잘못된 정보를 준다. @Override 어노테이션을 일관되게 명시적으로 사용하게 되면 이런 실수를 예방 할 수
+      있다(item #40). 예를 들어 위의 예시 메소드에 @Override 어노테이션을 사용했다면 컴파일 오류가 발생할 것아다.
+    * equals(hashCode도 마찬가지)를 작성하고 테스트하는 일은 지루하고 이를 테스트하는 코드도 항상 뻔하다. 다행이 이러한 작업을 대신하는 오픈소스가 있다. 구글에서 만든 AutoValue가 이
+      메소드들을 알아서 작성해주며, 직접 작성하는 것과 근본적으로 동일한 코드를 만들어 준다.
+
+### item #11: equals를 재정의하려거든 hashCode도 재정의하라.
+
