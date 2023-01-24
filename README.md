@@ -945,3 +945,122 @@ APM으로 봐도 되고... 없으면 jmap 으로 하면 될 듯
   예컨대 관례상 모든 범용 컬렉션 구현체는 Coolection이나 Map 타입을 받는 생성자를 제공한다.
 
 ### item #14: Comparable을 구현할지 고려하라
+
+* compareTo 메소드는 Comparable 인터페이스의 유일한 메소드이다.
+* Object equals 메소드와 compareTo 메소드가 다른 점은 단순 동치성 비교에 더해 순서까지 비교할 수 있으며 제네릭하다.
+* Comparable을 구현했다는 것은 그 클래스의 인스턴스들에는 자연적인 순서(natural order)가 있음을 뜻한다.
+  따라서 Comparable을 구현한 객체들의 배열은 다음처럼 손쉽게 정렬할 수 있다.
+    ```java
+    Arrays.sort(a)
+    ```
+* 검색, 극단값 계산, 자동 정렬되는 컬렉션 관리도 역시 쉽게 할 수 있다. 아래는 명령줄 인수들을 (중복을 제거하고) 알파벳순으로 출력한다.
+  String이 Comparable을 구현했기 때문이다.
+    ```java
+    public class WordList {
+        public static void main(String[] args) {
+            Set<String> s = new TreeSet<>();
+            Collections.addAll(s, args);
+            System.out.println(s);
+        }
+    }
+    ```
+* compareTo 규약은 아래 3가지임
+    1. 두 객체 참조의 순서를 바꿔도 예상한 결과가 나와야한다. 즉 첫 번째가 두 번째보다 작으면 두 번째가 첫 번째보다 커야한다.
+    2. 첫 번째가 두 번째보다 크고, 두 번째가 세 번째보다 크다면 첫 번째는 세 번째 보다 항상 커야한다.
+    3. 크기가 같은 객체들끼리는 어떤 객체와 비교하더라도 항상 같아야 한다.
+* 위의 세 규약은 compareTo 메서드로 수행하는 동치성 검사도 equals 규약과 똑같이 반사성, 대칭성, 추이성을 충족해야 함을 뜻한다.  
+  그래서 주의 사항도 똑같다. 기존 클래스를 확장한 구현 클래스에서 새로운 값 컴포넌트를 추가했다면 compareTo 규약을 지킬 방법이 없다(객체 지향적 추상화의 잇점을 포기할 생각이 아니라면
+  말이다-item10).  
+  우회법도 동일하다. Comparable을 구현한 글래스를 확장해 값 컴포넌트를 추가하고 싶다면, 확장하는 대신 독립된 클래스를 만들고, 이 클래스에 원래 클래스의 인스턴스를 가리키는 필드를 두자. 그런 다음 내부
+  인스턴스를 반환하는 '뷰'메서드를 제공하면 된다.  
+  이렇게 하면 바깥 클래스에 우리가 원하는 compareTo 메서드를 구현해 넣을 수 있다.
+* compareTo의 마지막 규약은 필수는 아니지만 꼭 지키길 권한다. 마지막 규약은 간단하게 말하면 compareTo로 수행한 동치성의 결과가 equals와 같아야 한다는 것이다.  
+  compareTo의 순서와 equals의 결과가 일관되지 않은 클래스의 객체를 정렬된 컬렉션에 넣으면 원하지 않은 결과를 볼 수 있다.  
+  BigDecimal 클래스가 원하지 않는 결과를 보여주는 예시이다. compareTo와 equals가 일관되지 않은 BigDecimal의 인스턴스 new BigDecimal("1.0")과 new
+  BigDecimal("1.00")은 HashSet에서 2개의 원소로 존재한다. TreeSet에서는 1개의 원소로 존재한다.  
+  <code>com.ijys.effectivejava.item14.Item14Main</code>
+* compareTo 메서드 작성 요령은 equals와 대부분 비슷하지만 Comparable은 타입을 인수로 받는 제네릭 인터페이스이므로 compareTo 메서드의 인수 타입은 컴파일타임에 정해진다.
+* compareTo 내의 비교자는 직접 만들거나 자바가 아래의 코드와 같이 자바가 제공하는 비교자를 사용해도 된다.
+  ```java
+  public final class CaseInsensitiveString implements Comparable<CaseInsensitiveString> {
+      ....
+      @Override
+      public int compareTo(CaseInsensitiveString cis) {
+          return String.CASE_INSENSITIVE_ORDER.compare(s, cis.s);
+      }
+      ....
+  }
+  ```
+* 책의 2판에서는 compareTo 메서드에서 정수 기본 타입 필드를 비교할 때는 관계 연산자인 < 와 >를, 실수 기본 타입 필드를 비교할 때는 정적 메서드인 Double.compare와
+  Float.compare를 사용하라고 했다.  
+  그런데, 자바7 부터는 상황이 변했다. 박싱된 기본 타입 클래스들에 새로 추가된 정적 메서드인 compare를 이용하면 된다. <b>compareTo 메서드에서 관계 연산자인 <와 >를 사용하는 이전 방식은
+  거추장스럽고 오류를 유발하니, 이제는 추천하지 않는다.</b>
+* 클래스에서 핵심 필드가 여러 개라면 가장 핵심적인 필드부터 비교해 나가자.
+    ```java
+    public int compareTo(ComparatorPhoneNumber cpn) {
+        int result = Short.compare(areaCode, cpn.areaCode);
+        if (result == 0) {
+            result = Short.compare(prefix, cpn.prefix);
+            if (result == 0)
+                result = Short.compare(lineNum, cpn.lineNum);
+        }
+        return result;
+    }
+    ```
+* 자바8에서는 Comparator 인터페이스가 일련의 비교자 생성 메서드(comparator construction method)와 같이 메서드 연쇄 방식으로 비교자를 생성할 수 있게 되었다.    
+  코드는 깔끔하게 생성되지만 약간의 성능 저하가 뒤따른다.
+    ```java
+    private static final Comparator<ComparatorPhoneNumber> COMPARATOR =
+            comparingInt((ComparatorPhoneNumber cpn) -> cpn.areaCode)
+                    .thenComparingInt(cpn -> cpn.prefix)
+                    .thenComparingInt(cpn -> cpn.lineNum);
+
+    public int compareTo(ComparatorPhoneNumber cpn) {
+        return COMPARATOR.compare(this, cpn);
+    }
+    ```
+* 위의 코드는 클래스를 초기화할 때 비교자 생성자 메서드 2개를 이용해 비교자를 생성한다.
+  그 첫 번째인 comparingInt는 객체 참조를 int 타입 키에 매핑하는 키 추출 함수(key extractor function)를 인수로 받아, 그 키를 기준으로 순서를 정하는 비교자를 반환하는 정적
+  메서드다.
+  위의 예에서 comparingInt는 lambda를 인수로 받으며, 이 lambda는 PhoneNumber에서 추출한 지역 코드를 기준으로 전화번호의 순서를 정하는 Comparator<PhoneNumber>를
+  반환한다.
+  이 lambda에서 입력 인수의 타입(PhoneNumber pn)을 명시한 점에 주목하자(lambda의 type casting은 아니고, 타입을 명시 - 자바의 기본 타입 추론 능력으로는 부족하니 컴파일 되도록
+  타입을 적었다).
+* 두 전화번호의 지역 코드가 같을 수 있으니 비교 방식을 더 다듬어야 한다. 이 일은 두 번째 비교자 생성 메서드인 thenComparingInt가 수행한다.
+  thenComparingInt는 원하는 만큼 연달아 호출할 수 있다. 이번에 thenComparingInt를 호출할 때 타입을 명시하지 않았다.
+* Comparator는 수많은 보조 생성 메소드들을 가지고 있다. long과 double을 위해서 comparingLong, comparingDouble, thenComparingLong,
+  thenComparingDouble도 준비되어 있다.  
+  short처럼 작은 수는 int용 메소드를 사용하고, float은 double용을 이용하면 된다.
+* 객체 참조형 비교자 생성 메소드도 준비되어 있다. comparing 정적 메소드 2개가 다중정의되어 있다. 첫 번째는 키 추출자(key extractor function)를 받아서 그 키의 자연적 순서를
+  사용한다.
+  두 번째는 키 추출자 하나와 추출된 키를 비교할 비교자까지 총 2개를 인수를 받는다. 또한, thenComparing이라는 인스턴스 메소드가 3개 다중 정의 되어 있다.
+    ```java
+    default Comparator<T> thenComparing(Comparator<? super T> other)
+    default <U extends Comparable<? super U>> Comparator<T> thenComparing(Function<? super T, ? extends U> keyExtractor)
+    default <U> Comparator<T> thenComparing(Function<? super T, ? extends U> keyExtractor, Comparator<? super U> keyComparator)
+    ```
+* 이따금 '값의 차'를 기준으로 첫 번째 값이 두 번째 값보다 작으면 음수를, 같으면 0을, 첫 번째 값이 크면 양수를 반환하는 compareTo나 compare 메소드와 마주할 것이다. 아래가 예시이다.
+    ```java
+    // 해시코드 값의 차이를 기준으로 하는 비교자 - 추이성을 위배한다.
+    static Comparator<Object> hashCodeOrder = new Comparator<>() {
+        public int compare(Object o1, Object o2) {
+            return o1.hashCode() - o2.hashCode();
+        }
+    };
+    ```
+  위의 방식은 사용하면 안된다. 이 방식은 정수 overflow를 일으키거나 IEEE 754 부동소수점 계산 방식(JLS 15.20.1, 15.21.1)에 따른 오류를 낼 수 있다.
+  그렇다고 이번 아이템에서 설명한 방법대로 구현한 코드보다 월등히 빠르지도 않을 것이다. 그 대신 다음의 두 방식 중 하나를 사용하자.
+    ```java
+    // 정적 compare메서드를 활용한 비교자
+    static Comparator<Object> hashCodeOrder = new Comparator<>() {
+        public int compare(Object o1, Object o2) {
+            return Integer.compare(o1.hashCode(), o2.hashCode());
+        }
+    }; 
+    ```
+    ```java
+    // 비교자 생성 메소드를 활용한 비교자
+    static Comparator<Object> hashCodeOrder = Comparator.comparingInt(o -> o.hashCode());
+    ```
+
+### item #15: 클래스와 멤버의 접근 권한을 최소화하라.
