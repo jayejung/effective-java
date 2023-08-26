@@ -3,6 +3,14 @@
 
 <code>com.ijys.effectivejava.item01.Item01Main</code>
 
+```java
+    public static Boolean valueOf(boolaen b){
+        return b?Boolean.TRUE:Boolean.FALSE;
+        }   
+```
+
+* 위와 같이 public 생성자 대신 정적 팩터리 메소드를 제공할 수 있음. ({Class}.valueOf(b))
+
 #### 장점 5가지
 1. 이름을 가질수 있다.
 2. 호출될 때마다 인스턴스를 새로 생성하지 않아도 된다.
@@ -1069,7 +1077,7 @@ APM으로 봐도 되고... 없으면 jmap 으로 하면 될 듯
   이와 같은 정보 은닉 혹은 캡슐화의 장점은 아래와 같이 많다.
     * 시스템 개발 속도를 높인다. 여러 컴포넌트를 병렬로 개발할 수 있기 때문이다.
     * 시스템 관리 비용을 낮춘다. 각 컴포넌트를 더 빨리 파악하여 디버깅할 수 있고, 다른 컴포넌트로 교체하는 부담도 적기 때문이다.
-    * 정보 은닉 자체가 성능을 높여주지는 않지만, 성능 최적화에 도움을 준다. 완성된 시스템을 프로파일링해 최적화할 컴포턴트를 정한 다음(아이템 #67),
+  * 정보 은닉 자체가 성능을 높여주지는 s않지만, 성능 최적화에 도움을 준다. 완성된 시스템을 프로파일링해 최적화할 컴포턴트를 정한 다음(아이템 #67),
       다른 컴포넌트에 영향을 주지 않고 해당 컴포넌트만 최적화할 수 있기 때문이다.
     * 소프트웨어 재사용성을 높인다. 외부에 거의 의존하지 않고 독자적으로 동작할 수 있는 컴포넌트라면 그 컴포넌트와 함께 개발되지 않은 낯선 환경에 서도 유용하게 쓰일 가능성이 크기 때문이다.
     * 큰 시스템을 재작하는 난이도를 낮춘다. 시스템 전체가 아직 완성되지 않은 상태에서도 개별 컴포넌트의 동작을 검증할 수 있기 때문이다.
@@ -1090,3 +1098,154 @@ APM으로 봐도 되고... 없으면 jmap 으로 하면 될 듯
 * 하지만, package-private 클래스 혹은 private 중첩 클래스라면 데이터 필드를 노출한다 해도 하등의 문제가 없다.
 * <b>public class는 절대로 가변 필드를 노출하면 안된다.</b> 불변 필드라면 노출해도 덜 위험하지만 완전히 안심할 수는 없다. 하지만, package-private 클래스나 private 중첩
   클래스에서는 종종(불변이든 가변이든) 필드를 노출하는 편이 나을 때도 있다.
+
+### item #17: 변경 가능성을 최소화하라
+
+* 불변 클래스란 짧게 말하면 그 인스턴스의 내부 값(필드)을 수정할 수 없는 클래스임. 불변 인스턴스에 간직된 정보는 고정되어 객체가 파기되는 순간까지 변경이 안됨.
+* 자바 기본라이브러리에도 다양한 불변클래스들이 있고, String, 기본 타입이 박싱된 BigInteger, BigDecimal이 여기에 속함. (primitive 타입 처럼 사용하려 그렇게 설계한듯?)
+* 불변클래스는 가변 클래스보다 설계, 구현 및 사용이 쉽고, 오류가 생길 여지도 적기 때문에 안전함.
+* 아래는 클래스를 불변으로 만들기 위한 5가지 규칙
+    * 객체의 상태를 변경하는 메서드를 제공하지 않는다.
+    * 클래스를 확장할 수 없도록 한다. (대표적인 방법으로는 final class)
+    * 모든 필드를 final로 선언한다.
+    * 모든 필드를 private으로 선언한다. (public final로 해도 될 듯 하지만 다음 릴리즈에서 내부 표현을 바꾸지 못함. 외부에서 직접 참조 하고 있을 수 있음)
+    * 자신 외에는 내부의 가변 컴포넌트에 접근할 수 없도록 한다. (내부에 가변 객체가 있다면 외부에서 참조하지 못하게 하라. 접근자 메서드가 그 필드를 그대로 반환해도 안된다. 생성자, 접근자,
+      readObject 메소드(item #68) 모두에서 방어적 복사를 수행하라).
+
+```java
+    public class Complex {
+    private final double re;
+    private final double im;
+
+    public Complex(double re, double im) {
+        this.re = re;
+        this.im = im;
+    }
+
+    public double realPart() {
+        return re;
+    }
+
+    public double imaginaryPart() {
+        return im;
+    }
+
+    public Complex plus(Complex c) {
+        return new Complex(re + c.re, im + c.im);
+    }
+
+    public Complex minus(Complex c) {
+        return new Complex(re - c.re, im - c.im);
+    }
+
+    public Complex times(Complex c) {
+        return new Complex(re * c.re - im * c.im,
+                re * c.im + im * c.re);
+    }
+
+    public Complex devidedBy(Complex c) {
+        double tmp = c.re * c.re + c.im * c.im;
+        return new Complex((re * c.re + im * c.im) / tmp,
+                (im * c.re - re * c.im) / tmp);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof Complex)) return false;
+
+        Complex complex = (Complex) o;
+
+        // == 대신 compare르르 사용한 이유는 63 page에...
+        return Double.compare(im, complex.im) == 0 &&
+                Double.compare(re, complex.re) == 0;
+    }
+
+    @Override
+    public int hashCode() {
+        return 31 * Double.hashCode(re) + Double.hashCode(im);
+    }
+
+    @Override
+    public String toString() {
+        return "Complex{" +
+                "re=" + re +
+                ", im=" + im +
+                '}';
+    }
+}
+```
+
+* 위의 코드는 복소수(실수부와 허수부로 구성된 수)를 표현함. 중요한건 모든 연산에서 새로운 Complex 객체를 생성해서 리턴함.
+* 피연산자의 함수를 적용해 그 결과를 반납하지만, 피연산자 자체에는 변경이 없는 이런 패턴을 함수형 프로그래밍이라고함. 이와 달리 절차적 혹은 명령형 프로그래밍에서는
+  메소드의 피연산자인 자신을 수정해 자신의 상태가 변하게 됨. 또한 메서드 이름에 동사(add)대신, 전치사(plus) 사용하여 객체의 값이 변경되지 않음을 강조했음.
+  참고로 이러한 명명규칙을 따르지 않는 BigInteger와 BigDecimal 클래스를 사람들이 잘 못 사용해 오류가 발생하는 일이 자주 있음.
+* 함수형 프로그래밍에 익숙치 않다면 조금 부자연스러울 수 있으나, 이런 방식으로 프로그래밍하게 되면 불변이 되는 영역의 비율이 높아지는 장점이 있음
+* 불변객체는 단순함. 불변객체는 생성 후, 폐기 될 때까지 동일한 상태를 유지하는 것임. 모든 생성자가 클래스 불변식(class invariant)를 보장한다면 그 클래스를 사용하는 프로그래머가 다른 노력을 들이지
+  않더라도 영원히 불변으로 남게 됨.
+* <b>불변 객체는 근본적으로 쓰레드 안전함. 쓰레드 안전하니, 안심하고 공유할 수 있음.</b> 따라서, 불변객체는 한 번 생성하면 최대한 재활용을 권장함. 쉽게 재활용하기 위해서 아래와 같이 자주 사용하는
+  객체는 상수화(public static final)하여 사용할 수도 있음.
+
+```java
+    public static final Complex ZERO=new Complext(0,0);
+public static final Complex ONE=new Complext(1,0);
+public static final Complex I=new Complext(0,1);
+```
+
+* 더 나아가 정적팩토리 메소드로 제공하여 같은 인스턴스를 중복 생성하지 않게 할 수도 있음. 박싱된 기본 타입 클래스 전부와 BigInteger가 여기 속함.
+* 불변객체를 자유롭게 공유할 수 있다는것은 방어적 복사(item #50)도 필요 없음. 아무리 복사해도 동일한 객체이므로 복사의 의미가 없음. 그러니, clone 메소드나 복사 생성자(item #13)를 제공하지
+  않는게 좋음.  
+  String 클래스의 복사 생성자는 초창기에 만들어 진 것으로 되도록 사용하지 말아야함. (item #6)
+* 불변객체는 자유롭게 공유 할 수 있음은 물론 불변 객체끼리 내부 데이터를 공유 할 수도 있음. BigInteger의 negate() 메소드를 통해서 새로 생성된 객체내의 mag(int[])은 동일한 배열을
+  참조함. (불변이니... 괜찮음)
+* 객체를 만들때 다른 불변 객체들을 구성 요소로 사용하면 이점이 많음. (맵의 키나 set의 요소로 사용하기 좋음.)
+* 불변객체는 그 자체로 실패 원자성을 제공함(item #76). 상태가 변하지 않으니 잠깐이라도 불일치 상태에 빠질 가능성이 없음.
+* 불변객체에도 단점이 있음. 값이 다르면 반드시 다른 객체로 생성해야함.
+* 위에 열거된 불변클래스를 위한 기본적인 방법과 장단점을 봤음. 또 다른 설계 방법을 알아볼거임. 클래스가 불변임을 보장하려면 자신을 상속하지 못하게 해야함.  
+  자신을 상속받지 못하게 하는 가장 쉬운 방법은 final 클래스로 선언하면 되겠지만 더 유연한 방법이 있음.  
+  모든 생성자를 private 혹은 package-private으로 만들고 public 정적 팩터리를 제공하는 방법임(item #1).
+* 아래는 Complex 클래스에 적용한 예시.
+
+```java
+    public class Complex {
+    private final double re;
+    private final double im;
+
+    private Complex(double re, double im) {
+        this.re = re;
+        this.im = im;
+    }
+        ......
+
+    public static Complex valueOf(double re, double im) {
+        return new Complex(re, im);
+    }
+```
+
+* 위의 방식이 최선일때가 많음. 바깥에서 볼수 없는 package-private 메소드를 맘껀 생성해도 되니 훨씬 유연하다. 그리고 바깥에서 이 클래스를 보면 사실상 final임.
+  public 이나 protected 생성자가 없으니 다른 패키지에서 이 클래스를 확장하는게 불가능함. 정적팩토리 방식은 <b>다수의 구현 클래스를 활용한 유연성을 제공하고, 이에 더해 다음 릴리즈에서 객체 캐싱
+  기능을 추가해 성능을 끌어 올릴수도 있음.</b>
+* BigInteger와 BigDecimal이 설계될 당시에는 불변객체가 final이어야한다는 생각이 부족했음. 그래서 두 클래스의 메서드들은 모두 재정의 가능할 수 있게 설계되었음.
+* 만약 BigInteger와 BigDecimal을 파라메터로 받고 불변성을 유지해야 한다면, 사본을 만들어서 사용하는게 좋음(item #50).
+
+```java
+    public static BigInteger safeInstance(BigInteger val){
+        return val.getClass()==BigInteger.class ?
+        val:new BigInteger(val.toByteArray());
+        }   
+```
+
+<details>
+<summary>정리</summary>
+
+* getter가 있다고 setter를 만들지 마시라.
+* 클래스는 꼭 필요한 경우가 아니라면 불변이어야함.
+  불변으로 만들 수 없는 클래스라도 변경할 수 있는 부분을 최소한으로 줄여야함. 다른 합당한 이유가 없다면 모든 필드는 private final 이어야함.
+* 생성자는 불변식 설정이 모두 완료된, 초기화가 완벽히 끝난 상태의 객체를 생성해야함. 확실한 이유가 없다면 생성자와 정적 팩터리외에는 그 어떤 초기화 메서드도 public으로 제공해서는 안됨. 객체를 재활용하기
+  위해서 상태를 초기화하는 메소드를 제공하면 복잡성만 커지고 성능 이점은 거의 없음.
+
+</details>
+
+### item #18: 상속보단느 컴포지션을 사용하라
+
+

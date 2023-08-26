@@ -1,6 +1,6 @@
 package com.ijys.effectivejava.item16;
 
-public final class Time {
+final class Time {
     private static final int HOURS_PER_DAY = 24;
     private static final int MINUTES_PER_HOUR = 60;
 
