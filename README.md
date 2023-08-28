@@ -1248,4 +1248,187 @@ public static final Complex I=new Complext(0,1);
 
 ### item #18: 상속보단느 컴포지션을 사용하라
 
+* 상속은 코드를 재사용하는 강력한 수단이지만 항상 최선은 아님. 잘 못 사용하면 오류를 내기 쉬운 소프트웨어를 만들게 됨.
+* 상위 클래스와 하위 클래스를 모두 같은 프로그래머가 통제하는 패키지 안에서라면 안전할 수 있음. 혹은, 확장할 목적으로 잘 설계되었고 문서화도 잘 된 클래스(item #19)도 마찬가지로 안전함.
+* <b>메서드 호출과 달리 상속은 캡슐화를 깨트린다.</b> 다르게 말하면 상위 클래스의 구현에 따라서 하위클래스의 동작에 이상이 생길 수 있음.  
+  하위 클래스의 변경없이 상위 클래스의 변경에 영향을 받아 하위클래스가 오동작 할 수 있음.
+* 아래는 구체적인 예임.
 
+```java
+    public class InstrumentedHashSet<E> extends HashSet<E> {
+    // 추가된 element의 수
+    private int addCount = 0;
+
+    public InstrumentedHashSet() {
+    }
+
+    public InstrumentedHashSet(int initialCapacity, float loadFactor) {
+        super(initialCapacity, loadFactor);
+    }
+
+    @Override
+    public boolean add(E e) {
+        addCount++;
+        return super.add(e);
+    }
+
+    @Override
+    public boolean addAll(Collection<? extends E> c) {
+        addCount += c.size();
+        return super.addAll(c);
+    }
+
+    public int getAddCount() {
+        return addCount;
+    }
+}
+```
+
+* 아래와 같이 3개의 요소를 addAll 메소드로 추가한다고 가정.
+
+```java
+    InstrumentedHashSet<String> s=new InstrumentedHashSet<>();
+        s.addAll(List.of("틱","틱틱","펑"));
+```
+
+* 3개의 요소를 추가 했으므로, addCount는 3이 될 것으로 생각되지만, s.getAddCount()로 addCount를 확인해보면 6이 되어 있음.  
+  상위 클래스 HashSet의 addAll 메소드가 내부에서 add 메소드를 call 하고 있다.
+* 위와 같은 내용이 API 문서에 쓰여 있지 않다.
+* 이 경우에는 하위 클래스에서 addAll 메소드를 재정의하지 않거나, 혹은 addAll에서 addCount를 증가시키지 않으면 문제가 해결 될지 모르지만, 상위클래스의 변경에 항상 영향을 받게 됨.
+* 하위클래스가 깨지는 경우는 다양하게 나타남. 상위클래스에서 새로운 메소드가 추가되고 element가 추가될때 마다 모든 원소가 특정 조건을 만족해야하는 등 상위 클래스의 요건으로 인핵서 하위 클래스의 구현이
+  변경되어야 하는 경우도 발생함.
+* 위의 이슈들은 모두 하위 클래스에서 재정의(overloading)하는 경우에 발생함. 따라서 클래스를 확장하더라도 메소드를 재정의 하지 않고 새로운 메서드를 추가하면 괜찮을 것 처럼 보이지만, 위험이 전혀 없는
+  것은 아님.
+  다음 릴리즈에서 상위클래스에 메소드가 추가되었는데 하위클래스에서 추가된 메소드와 이름, 시그네처가 동일하다면 하위클래스의 의도와 무관하게 이슈가 발생함. 예를 들면 리턴타입이 달라서 빌드에 실패하거나 위의
+  재정의하는 것과 동일한 이슈가 발생할 수 있음.
+* 이러한 문제를 해결하기 위해서는 클래스를 확장하는 대신 새로운 클래스를 만들고 private 필드로 기존클래스(위 예시의 상위클래스)를 참조하게 하면 됨. 기존의 클래스가 신규 클래스의 구성 요소로 사용되기
+  때문에 이러한 설계를 composition이라고 함. 기존 클래스의 메소드를 사용하여 결과를 반환하면 되고 이러한 방식을 forwarding이라고 함. (새로운 클래스의 메소드를 forwarding
+  method라고 부름).
+  그 결과로 새로운 클래스는 기존 클래스의 내부 구현에 전혀 영향을 받지 않게 됨. 위의 예시를 컴포지션 설계로 바꾸면 아래와 같이 구현이 됨.
+* Composition 방식으로 InstrumentedSet을 구현했고, forwarding method 만으로만 이루어진 재사용 가능한 forwarding class 임.
+
+```java
+    // composition으로 구현된 InstrumentedSet
+public class InstrumentedSet<E> extends ForwardingSet<E> {
+    private int addCount = 0;
+
+    public InstrumentedSet(Set<E> e) {
+        super(e);
+    }
+
+    @Override
+    public boolean add(E e) {
+        addCount++;
+        return super.add(e);
+    }
+
+    @Override
+    public boolean addAll(Collection<? extends E> c) {
+        addCount += c.size();
+        return super.addAll(c);
+    }
+}
+```
+
+```java
+    // forwarding class with forwarding method
+public class ForwardingSet<E> implements Set<E> {
+    private final Set<E> e;
+
+    public ForwardingSet(Set<E> e) {
+        this.e = e;
+    }
+
+    public void clear() {
+        e.clear();
+    }
+
+    public boolean contains(Object o) {
+        return e.contains(o);
+    }
+
+    public boolean isEmpty() {
+        return e.isEmpty();
+    }
+
+    public int size() {
+        return e.size();
+    }
+
+    public Iterator<E> iterator() {
+        return e.iterator();
+    }
+
+    public boolean add(E e) {
+        return this.e.add(e);
+    }
+
+    public boolean remove(Object o) {
+        return e.remove(o);
+    }
+
+    public boolean containsAll(Collection<?> c) {
+        return e.containsAll(c);
+    }
+
+    public boolean addAll(Collection<? extends E> c) {
+        return e.addAll(c);
+    }
+
+    public boolean removeAll(Collection<?> c) {
+        return e.removeAll(c);
+    }
+
+    public boolean retainAll(Collection<?> c) {
+        return e.retainAll(c);
+    }
+
+    public Object[] toArray() {
+        return e.toArray();
+    }
+
+    public <T> T[] toArray(T[] a) {
+        return e.toArray(a);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        return e.equals(o);
+    }
+
+    @Override
+    public String toString() {
+        return e.toString();
+    }
+
+    @Override
+    public int hashCode() {
+        return e.hashCode();
+    }
+}
+```
+
+* InstrumentedSet은 HashSet의 모든 기능을 정의한 Set 인터페이스를 활용해 설계되었고 견고하고 아주 유연함. 구체적으로는 Set interface를 구현했고, Set의 인스턴스를 받는 생성자를
+  하나 제공함.
+  임의의 Set에 계측 기능을 덧씌워 새로운 Set으로 만드는 것이 이 클래스의 핵심임. 상속 method는 구현 클래스 각각에 따로 확장해야하고 지원 받고 싶은 상위 클래스의 생성자 각각에 대응하는 생성자를
+  별도로 정의해야함. (이거 번역 이상함.)
+  하지만, 지금 예시로 만든 composition방식은 한 번만 구현해두면 어떠한 Set 구현체라도 사용가능하고 기존 생성자들과도 함께 사용할 수 있음.
+
+```java
+    Set<Instance> times=new InstrumentedSet<>(new TreeSet<>(cmp));
+        Set<E> s=new InstrumentedSet<>(new HashSet<>(INIT_CAPACITY));
+```
+
+* InstrumentedSet 을 이용하면 대상 Set 인스턴스를 특정 조건하에만 임시로 instrument할 수 있음.
+
+```java
+    static void walk(Set<Dog> dogs){
+        InstrumentedSet<Dog> iDogs=new InstrumentedSet<>(dogs);
+        ... // 이 메서드에서는 dogs 대신 iDogs를 사용한다.
+        }
+```
+
+* 다른 Set 인스턴스를 감싸고(wrap) 있다는 뜻에서 InstrumentedSet 같은 클래스를 wrapper 클래스라고하며, 다른 Set에 instrument 기능을 덧 씌운다는 뜻에서 데코레이터 패턴(
+  Decorator pattern)이라고 부름.
+  컴포진션과 전달의 조합은 넓은 의미로 위임(deligation)이라고 부름. 단, 엄밀하게 보면 wrapper class가 내부 객체에 자기 자신의 참조를 넘기는 경우만 위임에 해당함.
+* wrapper class는 단점이 거의 없음. 한 가지, wrapper class가 콜백(callback)프레임워크와는 어울리지 않다고 함.(왜??)
